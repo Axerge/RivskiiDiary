@@ -50,5 +50,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='C:/Users/Geralt/PycharmProjects/RivskiiDiary/img/program_icon.ico'
+    icon='C:/Users/Geralt/PycharmProjects/RivskiiDiary/img/program_icon.ico',
+    version='file_version_info.txt'
 )

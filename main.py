@@ -34,7 +34,7 @@ def get_current_version():
 def check_for_updates():
     try:
         # Здесь должен быть URL вашего API или файла с последней версией
-        response = requests.get('https://api.github.com/repos/yourusername/RivskiiDiary/releases/latest')
+        response = requests.get('https://api.github.com/repos/Axerge/RivskiiDiary/releases/latest')
         if response.status_code == 200:
             latest_version = response.json()['tag_name'].replace('v', '')
             current_version = get_current_version()
@@ -62,7 +62,7 @@ def check_for_updates():
 def download_update():
     try:
         # Здесь должен быть URL для скачивания обновления
-        response = requests.get('https://api.github.com/repos/yourusername/RivskiiDiary/releases/latest')
+        response = requests.get('https://api.github.com/repos/Axerge/RivskiiDiary/releases/latest')
         if response.status_code == 200:
             download_url = response.json()['assets'][0]['browser_download_url']
             
