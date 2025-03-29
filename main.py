@@ -9,6 +9,7 @@ import ctypes
 import win32api
 import win32gui
 import win32process
+import win32security
 import webbrowser
 import time
 import requests
@@ -33,7 +34,7 @@ def get_current_version():
 
 def check_for_updates():
     try:
-        # Здесь должен быть URL вашего API или файла с последней версией
+        # Используем правильный URL для API GitHub
         response = requests.get('https://api.github.com/repos/Axerge/RivskiiDiary/releases/latest')
         if response.status_code == 200:
             latest_version = response.json()['tag_name'].replace('v', '')
@@ -61,7 +62,7 @@ def check_for_updates():
 
 def download_update():
     try:
-        # Здесь должен быть URL для скачивания обновления
+        # Используем правильный URL для API GitHub
         response = requests.get('https://api.github.com/repos/Axerge/RivskiiDiary/releases/latest')
         if response.status_code == 200:
             download_url = response.json()['assets'][0]['browser_download_url']
@@ -93,6 +94,27 @@ del "%~f0"
                 return bat_file
     except Exception:
         return None
+
+def get_current_user():
+    try:
+        # Получаем токен текущего процесса
+        process_token = win32security.OpenProcessToken(
+            win32api.GetCurrentProcess(),
+            win32security.TOKEN_QUERY
+        )
+        
+        # Получаем SID пользователя
+        user_sid = win32security.GetTokenInformation(process_token, win32security.TokenUser)[0]
+        
+        # Получаем имя пользователя
+        user_name, domain = win32security.LookupAccountSid(None, user_sid)
+        
+        # Проверяем, запущена ли программа с правами администратора
+        is_admin = win32security.CheckTokenMembership(None, win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid, None))
+        
+        return f"{domain}\\{user_name}", is_admin
+    except Exception:
+        return "Запущено не от имени администратора", False
 
 class TemplateWindow(QtWidgets.QWidget):
     def __init__(self, title, content):
@@ -793,6 +815,55 @@ class RivskiiDiary(QtWidgets.QMainWindow):
         """)
         self.check_updates_button.clicked.connect(self.check_updates_manually)
         settings_layout.addWidget(self.check_updates_button)
+
+
+        # Добавляем информацию о пользователе
+        user_name, is_admin = get_current_user()
+        user_info = QtWidgets.QLabel(f"Пользователь: {user_name}")
+        if is_admin:
+            user_info.setText(user_info.text() + " (Администратор)")
+        user_info.setStyleSheet("""
+            QLabel {
+                color: #000000;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px;
+                background-color: #fbff00;
+                border-radius: 10px;
+            }
+        """)
+        user_info.setAlignment(QtCore.Qt.AlignCenter)
+        settings_layout.addWidget(user_info)
+
+        # Добавляем информацию о версии
+        version_info = QtWidgets.QLabel(f"Текущая версия: {get_current_version()}")
+        version_info.setStyleSheet("""
+            QLabel {
+                color: #000000;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px;
+                background-color: #fbff00;
+                border-radius: 10px;
+            }
+        """)
+        version_info.setAlignment(QtCore.Qt.AlignCenter)
+        settings_layout.addWidget(version_info)
+
+        # Добавляем информацию об авторских правах
+        copyright_info = QtWidgets.QLabel("Copyright (c) 2025 Geralt Rivskii")
+        copyright_info.setStyleSheet("""
+            QLabel {
+                color: #000000;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px;
+                background-color: #fbff00;
+                border-radius: 10px;
+            }
+        """)
+        copyright_info.setAlignment(QtCore.Qt.AlignCenter)
+        settings_layout.addWidget(copyright_info)
 
         tab_widget.addTab(settings_tab, 'Настройки')
 
@@ -1611,9 +1682,25 @@ class RivskiiDiary(QtWidgets.QMainWindow):
         return text
 
     def open_data_directory(self):
-        # Открываем папку с JSON файлами
+        # Получаем путь к папке с файлами
         data_directory = get_data_directory()
-        os.startfile(data_directory)
+        
+        # Проверяем, запущена ли программа от имени администратора
+        is_admin = win32security.CheckTokenMembership(None, win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid, None))
+        
+        if is_admin:
+            # Если запущено от администратора, открываем папку администратора
+            admin_appdata = os.path.join(os.getenv('LOCALAPPDATA'), 'RivskiiDiary')
+            if os.path.exists(admin_appdata):
+                os.startfile(admin_appdata)
+            else:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Папка с файлами не найдена")
+        else:
+            # Для обычного пользователя
+            if os.path.exists(data_directory):
+                os.startfile(data_directory)
+            else:
+                QtWidgets.QMessageBox.warning(self, "Ошибка", "Папка с файлами не найдена")
 
     def reset_settings(self):
         settings_path = os.path.join(get_data_directory(), 'settings.json')
@@ -1701,11 +1788,57 @@ class AddTriggerDialog(QtWidgets.QDialog):
         return self.name_input.text(), self.content_input.toPlainText()
 
 def get_data_directory():
-    # Получаем путь к папке AppData\Local
+    # Получаем токен текущего процесса
+    process_token = win32security.OpenProcessToken(
+        win32api.GetCurrentProcess(),
+        win32security.TOKEN_QUERY
+    )
+    
+    # Получаем SID пользователя
+    user_sid = win32security.GetTokenInformation(process_token, win32security.TokenUser)[0]
+    
+    # Получаем имя пользователя
+    user_name, domain, _ = win32security.LookupAccountSid(None, user_sid)  # Распаковываем все 3 значения
+    
+    # Формируем полное имя пользователя
+    full_user_name = f"{domain}\\{user_name}"
+    
+    # Получаем путь к папке AppData\Local для текущего пользователя
     appdata_path = os.path.join(os.getenv('LOCALAPPDATA'), 'RivskiiDiary')
+    
+    # Если программа запущена от имени администратора, используем его AppData
+    if win32security.CheckTokenMembership(None, win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid, None)):
+        # Получаем путь к AppData администратора
+        admin_appdata = os.path.join(os.getenv('LOCALAPPDATA'), 'RivskiiDiary')
+        if not os.path.exists(admin_appdata):
+            os.makedirs(admin_appdata)
+        return admin_appdata
+    
+    # Для обычного пользователя
     if not os.path.exists(appdata_path):
-        os.makedirs(appdata_path)  # Создаем папку, если она не существует
+        os.makedirs(appdata_path)
     return appdata_path
+
+def open_data_directory(self):
+    # Получаем путь к папке с файлами
+    data_directory = get_data_directory()
+    
+    # Проверяем, запущена ли программа от имени администратора
+    is_admin = win32security.CheckTokenMembership(None, win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid, None))
+    
+    if is_admin:
+        # Если запущено от администратора, открываем папку администратора
+        admin_appdata = os.path.join(os.getenv('LOCALAPPDATA'), 'RivskiiDiary')
+        if os.path.exists(admin_appdata):
+            os.startfile(admin_appdata)
+        else:
+            QtWidgets.QMessageBox.warning(self, "Ошибка", "Папка с файлами не найдена")
+    else:
+        # Для обычного пользователя
+        if os.path.exists(data_directory):
+            os.startfile(data_directory)
+        else:
+            QtWidgets.QMessageBox.warning(self, "Ошибка", "Папка с файлами не найдена")
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
